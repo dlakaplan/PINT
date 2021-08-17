@@ -53,6 +53,7 @@ from pint.models.parameter import (
 from pint.phase import Phase
 from pint.toa import TOAs
 from pint.utils import PrefixError, interesting_lines, lines_of, split_prefixed_name
+from pint.utils import weighted_mean, taylor_horner_deriv
 
 __all__ = [
     "DEFAULT_ORDER",
@@ -1133,6 +1134,51 @@ class TimingModel:
             return phase - tz_phase
         else:
             return phase
+
+    def frequency(self, toas=None):
+        """Return pulsar rotational frequency in Hz.
+
+        Parameters
+        ----------
+        toas : pint.toa.TOAs, optional
+            TOAs at which frequency should be computed.  If not supplied, uses ``F0`` or ``P0``
+
+        Returns
+        -------
+        freq : astropy.units.Quantity
+            Either the single ``F0`` in the model or the spin frequency at the moment of each TOA.
+        """
+        if toas is None:
+            if "Spindown" in self.components:
+                F0 = self.F0.quantity
+            elif "P0" in self.params:
+                F0 = 1.0 / self.P0.quantity
+            else:
+                raise AttributeError(
+                    "No pulsar spin parameter(e.g., 'F0'," " 'P0') found."
+                )
+            return F0.to(u.Hz)
+        # see Spindown.spindown_phase
+        dt = self.get_dt(toas, 0)
+        fterms = [0.0 * u.dimensionless_unscaled] + self.get_spin_terms()
+        return taylor_horner_deriv(dt, fterms, deriv_order=1).to(u.Hz)
+
+    def equivalencies(self, toas=None):
+        freq = self.frequency(toas=toas).to_value(u.Hz)
+        return u.equivalencies.Equivalency(
+            [
+                (u.s, u.Hz, lambda x: 1 / x, lambda x: 1 / x),
+                (u.s, u.dimensionless_unscaled, lambda x: x * freq, lambda x: x / freq),
+                (
+                    u.Hz,
+                    u.dimensionless_unscaled,
+                    lambda x: x / freq,
+                    lambda x: x * freq,
+                ),
+            ],
+            "pulsar",
+            {"toas": toas},
+        )
 
     def total_dm(self, toas):
         """Calculate dispersion measure from all the dispersion type of components."""
