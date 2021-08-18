@@ -52,7 +52,13 @@ from pint.models.parameter import (
 )
 from pint.phase import Phase
 from pint.toa import TOAs
-from pint.utils import PrefixError, interesting_lines, lines_of, split_prefixed_name
+from pint.utils import (
+    PrefixError,
+    interesting_lines,
+    lines_of,
+    split_prefixed_name,
+    taylor_horner_deriv,
+)
 
 __all__ = [
     "DEFAULT_ORDER",
@@ -1133,6 +1139,122 @@ class TimingModel:
             return phase - tz_phase
         else:
             return phase
+
+    def spin_frequency(self, toas=None):
+        """Return pulsar rotational frequency in Hz.
+
+        Parameters
+        ----------
+        toas : pint.toa.TOAs, astropy.units.Quantity, or astropy.time.Time, optional
+            TOAs at which frequency should be computed.  If not supplied, uses ``F0`` or ``P0``
+
+        Returns
+        -------
+        freq : astropy.units.Quantity
+            Either the single ``F0`` in the model or the spin frequency at the moment of each TOA.
+
+        Raises
+        ------
+        ValueError
+            If `toas` are astropy.time.Time and do not have TDB scale
+        AttributeError
+            If no spin parameters are present in the model
+        """
+        if toas is None:
+            if "Spindown" in self.components:
+                F0 = self.F0.quantity
+            elif "P0" in self.params:
+                F0 = 1.0 / self.P0.quantity
+            else:
+                raise AttributeError(
+                    "No pulsar spin parameter(e.g., 'F0'," " 'P0') found."
+                )
+            return F0.to(u.Hz)
+        if isinstance(toas, pint.toa.TOAs):
+            # see Spindown.spindown_phase
+            dt = self.get_dt(toas, 0)
+        elif isinstance(toas, time.Time):
+            if toas.scale == "tdb":
+                dt = (toas - self.PEPOCH.quantity).to(u.d)
+            else:
+                raise ValueError("toas as Time instance needs scale=='tdb'")
+        elif isinstance(toas, u.Quantity):
+            dt = toas - self.PEPOCH.quantity.mjd * u.d
+        fterms = [0.0 * u.dimensionless_unscaled] + self.get_spin_terms()
+        return taylor_horner_deriv(dt, fterms, deriv_order=1).to(u.Hz)
+
+    def orbital_frequency(self, toas=None):
+        """Return pulsar orbital frequency in Hz.
+
+        Parameters
+        ----------
+        toas : pint.toa.TOAs, astropy.units.Quantity, or astropy.time.Time, optional
+            TOAs at which frequency should be computed.  If not supplied, uses ``FB0``, ``FB``, or ``PB``
+
+        Returns
+        -------
+        freq : astropy.units.Quantity
+            Either the single orbital frequency in the model or the orbital frequency at the moment of each TOA.
+            If not a binary returns None.
+
+        Raises
+        ------
+        ValueError
+            If `toas` are astropy.time.Time and do not have TDB scale
+        AttributeError
+            If no orbital parameters are present in the model
+            If no reference time (``T0``, ``TASC``) present in the model
+        """
+        if not self.is_binary:
+            return None
+        # just default frequency
+        # look at PB, FB, FB0
+        if toas is None:
+            if "PB" in self.params and self.PB.quantity is not None:
+                FB = 1.0 / self.PB.quantity
+            elif "FB" in self.params and self.FB.quantity is not None:
+                FB = self.FB.quantity
+            elif "FB0" in self.params and self.FB0.quantity is not None:
+                FB = self.FB0.quantity
+            else:
+                raise AttributeError(
+                    "No pulsar orbital parameter(e.g., 'FB'," " 'PB') found."
+                )
+            return FB.to(u.Hz)
+
+        # evaluate frequency for each TOA
+        # need to know reference time
+        # look for T0, TASC
+        if "T0" in self.params:
+            T0 = self.T0.quantity
+        elif "TASC" in self.params:
+            T0 = self.TASC.quantity
+        else:
+            raise AttributeError(
+                "No reference time ('T0', 'TASC') available for binary model"
+            )
+        if isinstance(toas, pint.toa.TOAs):
+            dt = toas.table["tdbld"] * u.d - T0.mjd * u.d
+        elif isinstance(toas, time.Time):
+            if toas.scale == "tdb":
+                dt = (toas - T0).to(u.d)
+            else:
+                raise ValueError("toas as Time instance needs scale=='tdb'")
+        elif isinstance(toas, u.Quantity):
+            dt = toas - T0.mjd * u.d
+
+        if "PB" in self.params and self.PB.quantity is not None:
+            FB = 1.0 / self.PB.quantity
+            if "PBDOT" in self.params and self.PBDOT.quantity is not None:
+                FB1 = -self.PBDOT.quantity / self.PB.quantity ** 2
+            else:
+                FB1 = 0 * u.Hz / u.s
+            return (FB + FB1 * dt).to(u.Hz)
+        fbterms = [
+            getattr(self, k).quantity for k in self.get_prefix_mapping("FB").values()
+        ]
+        fbterms = [0.0 * u.Unit("")] + fbterms
+        return taylor_horner_deriv(dt, fbterms, deriv_order=1).to(u.Hz)
 
     def total_dm(self, toas):
         """Calculate dispersion measure from all the dispersion type of components."""
