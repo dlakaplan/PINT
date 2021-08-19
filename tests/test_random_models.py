@@ -43,3 +43,24 @@ def test_random_models():
 
     # this should be less than the fully free version
     assert dphase_F.std(axis=0).max() < dphase.std(axis=0).max()
+
+def test_random_models_time():
+    
+    # Get model and TOAs
+    m, t = get_model_and_toas(
+        os.path.join(datadir, "NGC6440E.par"), os.path.join(datadir, "NGC6440E.tim")
+    )
+
+    f = fitter.WLSFitter(toas=t, model=m)
+    # Do a 4-parameter fit
+    f.model.free_params = ("F0", "F1", "RAJ", "DECJ")
+    f.fit_toas()
+
+    # this contains TOAs up through 54200
+    # make new ones starting there
+    tnew = simulation.make_fake_toas_uniform(54200, 59000, 59000 - 54200, f.model)
+    dt, mrand = simulation.calculate_random_models(f, tnew, Nmodels=100, return_time=True)
+
+    # this is a bit stochastic, but I see typically < 0.14 cycles
+    # for the uncertainty at 59000
+    assert np.all(dt.std(axis=0) < 0.2/f.model.F0.quantity)
