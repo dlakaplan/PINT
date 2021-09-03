@@ -1,8 +1,10 @@
 from io import StringIO
+import os
 
 import pytest
 
 from pint.models import get_model
+from pinttestdata import datadir
 
 par_basic = """
 PSR J1234+5678
@@ -93,5 +95,12 @@ EPS2            -1.8943477531941200777e-06 1 2.097611442502435212e-06
 def test_known_problem():
     m1 = get_model(StringIO(par_15yr_a))
     m2 = get_model(StringIO(par_15yr_b))
+    m1.compare(m2)
+    m2.compare(m1)
+
+
+def test_missin_params():
+    m1 = get_model(os.path.join(datadir, "J0437-4715_PINT_20210831.wb.par"))
+    m2 = get_model(os.path.join(datadir, "J0437_basic.par"))
     m1.compare(m2)
     m2.compare(m1)
