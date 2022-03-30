@@ -44,6 +44,7 @@ from pint.pulsar_mjd import (
     two_sum,
 )
 from pint.utils import PosVel
+from xprec import ddouble
 
 time_eps = (np.finfo(float).eps * u.day).to(u.ns)
 
@@ -140,21 +141,21 @@ def any_mjd(draw):
 @given(any_mjd())
 def test_str_roundtrip_is_exact(i_f):
     i, f = i_f
-    ld = np.longdouble(i) + np.longdouble(f)
-    assert ld == np.longdouble(str(ld))
+    ld = np.int32(i).astype(ddouble) + np.float32(f).astype(ddouble)
+    assert ld == (str(ld)).astype(ddouble)
 
 
 @given(any_mjd())
 def test_longdouble_str_roundtrip_is_exact(i_f):
     i, f = i_f
-    ld = np.longdouble(i) + np.longdouble(f)
+    ld = (i).astype(ddouble) + (f).astype(ddouble)
     assert ld == str2longdouble(longdouble2str(ld))
 
 
 @given(any_mjd())
 def test_longdouble2str_same_as_str_and_repr(i_f):
     i, f = i_f
-    ld = np.longdouble(i) + np.longdouble(f)
+    ld = (i).astype(ddouble) + (f).astype(ddouble)
     assert longdouble2str(ld) == str(ld)
     assert longdouble2str(ld) == repr(ld)
 
@@ -194,7 +195,7 @@ def test_str2longdouble_rejects_bytes(s):
         ("1", 1),
         (1.0, 1.0),
         (np.float32(1.0), 1.0),
-        (np.longdouble(1.0), 1.0),
+        (np.float32(1.0).astype(ddouble), 1.0),
         (np.array([1]), np.array([1.0])),
         (np.array([[1]]), np.array([[1.0]])),
     ],
@@ -212,12 +213,12 @@ def test_data2longdouble_accepts_types(d, ld):
         [1],
         [1, 2, 3],
         [1.5, 2],
-        np.ones(5, dtype=np.longdouble) + np.finfo(np.longdouble).eps,
+        np.ones(5, dtype=ddouble) + np.finfo(np.longdouble).eps,
         np.random.randn(2, 3, 4),
     ],
 )
 def test_data2longdouble_converts_arrays(a):
-    assert_array_equal(data2longdouble(a), np.asarray(a, dtype=np.longdouble))
+    assert_array_equal(data2longdouble(a), np.asarray(a, dtype=ddouble))
 
 
 # astropy.time.Time construction (?!)
@@ -278,7 +279,7 @@ def test_time_to_longdouble_via_jd(scale, i_f):
     i, f = i_f
     jd1, jd2 = day_frac(i + erfa.DJM0, f)
     t = Time(val=jd1, val2=jd2, format="jd", scale=scale)
-    ld = np.longdouble(i) + np.longdouble(f)
+    ld = (i).astype(ddouble) + (f).astype(ddouble)
     assert (abs(time_to_longdouble(t) - ld) * u.day).to(u.ns) < 1 * u.ns
 
 
@@ -291,7 +292,7 @@ def test_time_to_longdouble_via_jd(scale, i_f):
 def test_time_to_longdouble(scale, i_f):
     i, f = i_f
     t = Time(val=i, val2=f, format="mjd", scale=scale)
-    ld = np.longdouble(i) + np.longdouble(f)
+    ld = (i).astype(ddouble) + (f).astype(ddouble)
     assert (abs(time_to_longdouble(t) - ld) * u.day).to(u.ns) < 1 * u.ns
 
 
@@ -306,7 +307,7 @@ def test_time_to_longdouble(scale, i_f):
 def test_time_to_longdouble_utc(format, scale, i_f):
     i, f = i_f
     t = Time(val=i, val2=f, format=format, scale="utc")
-    ld = np.longdouble(i) + np.longdouble(f)
+    ld = (i).astype(ddouble) + (f).astype(ddouble)
     assert_quantity_allclose(
         time_to_longdouble(t) * u.day, ld * u.day, rtol=0, atol=1.0 * u.ns
     )
@@ -322,7 +323,7 @@ def test_time_to_longdouble_utc(format, scale, i_f):
 def test_time_from_longdouble(scale, i_f):
     i, f = i_f
     t = Time(val=i, val2=f, format="mjd", scale=scale)
-    ld = np.longdouble(i) + np.longdouble(f)
+    ld = (i).astype(ddouble) + (f).astype(ddouble)
     assert (
         abs(time_from_longdouble(ld, format="mjd", scale=scale) - t).to(u.ns) < 1 * u.ns
     )
@@ -340,7 +341,7 @@ def test_time_from_longdouble_utc(format, i_f):
         not (format == "pulsar_mjd" and i in leap_sec_days and (1 - f) * 86400 < 1e-9)
     )
     t = Time(val=i, val2=f, format=format, scale="utc")
-    ld = np.longdouble(i) + np.longdouble(f)
+    ld = (i).astype(ddouble) + (f).astype(ddouble)
     assert (
         abs(time_from_longdouble(ld, format=format, scale="utc") - t).to(u.ns)
         < 1 * u.ns
@@ -368,7 +369,7 @@ def test_time_to_longdouble_close_to_time_to_mjd_string(format, i_f):
     # NOTE: have to add str() here, because of a numpy bug which treats
     # numpy string type differently from python str.
     # See https://github.com/numpy/numpy/issues/15608
-    tld_str = np.longdouble(str(tstr))
+    tld_str = (str(tstr)).astype(ddouble)
     assert abs(tld_str - tld) * u.day < 1 * u.ns
 
 
@@ -391,13 +392,13 @@ def test_time_to_longdouble_no_longer_than_time_to_mjd_string(i_f):
 @pytest.mark.parametrize("format", ["mjd", "pulsar_mjd"])
 def test_time_to_mjd_string_versus_longdouble(format, i_f):
     i, f = i_f
-    m = i + np.longdouble(f)
+    m = i + (f).astype(ddouble)
     t = Time(val=i, val2=f, format=format, scale="utc")
     tstr = time_to_mjd_string(t)
     # NOTE: have to add str() here, because of a numpy bug which treats
     # numpy string type differently from python str.
     # See https://github.com/numpy/numpy/issues/15608
-    tld_str = np.longdouble(str(tstr))
+    tld_str = (str(tstr)).astype(ddouble)
     assert abs(tld_str - m) * u.day < 1 * u.ns
 
 
@@ -420,7 +421,7 @@ def test_time_to_mjd_string_versus_decimal(format, i_f):
 @given(reasonable_mjd())
 def test_time_from_mjd_string_versus_longdouble_tai(i_f):
     i, f = i_f
-    m = np.longdouble(i) + np.longdouble(f)
+    m = (i).astype(ddouble) + (f).astype(ddouble)
     s = str(m)
     assert (
         abs(
@@ -434,7 +435,7 @@ def test_time_from_mjd_string_versus_longdouble_tai(i_f):
 @pytest.mark.parametrize("format", ["mjd", "pulsar_mjd"])
 def test_time_from_mjd_string_versus_longdouble_utc(format, i_f):
     i, f = i_f
-    m = np.longdouble(i) + np.longdouble(f)
+    m = (i).astype(ddouble) + (f).astype(ddouble)
     s = str(m)
     assert (
         abs(
@@ -470,9 +471,9 @@ def test_pulsar_mjd_never_differs_too_much_from_mjd_utc(i_f):
 
 
 def test_posvel_respects_longdouble():
-    pos = np.ones(3, dtype=np.longdouble)
+    pos = np.ones(3, dtype=ddouble)
     pos[0] += np.finfo(np.longdouble).eps
-    vel = np.ones(3, dtype=np.longdouble)
+    vel = np.ones(3, dtype=ddouble)
     vel[1] += np.finfo(np.longdouble).eps
     pv = PosVel(pos, vel)
     assert_array_equal(pv.pos, pos)
@@ -487,7 +488,7 @@ def test_posvel_respects_longdouble():
 @pytest.mark.parametrize("format", ["pulsar_mjd", "mjd"])
 def test_time_from_mjd_string_accuracy_vs_longdouble(format, i_f):
     i, f = i_f
-    mjd = np.longdouble(i) + np.longdouble(f)
+    mjd = (i).astype(ddouble) + (f).astype(ddouble)
     assume(
         not (format == "pulsar_mjd" and i in leap_sec_days and (1 - f) * 86400 < 1e-9)
     )

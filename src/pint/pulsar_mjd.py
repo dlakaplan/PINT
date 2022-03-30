@@ -36,6 +36,7 @@ import astropy.units as u
 import numpy as np
 from astropy.time import Time
 from astropy.time.formats import TimeFormat
+from xprec import ddouble
 
 try:
     maketrans = str.maketrans
@@ -118,7 +119,7 @@ class MJDLong(TimeFormat):
     name = "mjd_long"
 
     def _check_val_type(self, val1, val2):
-        if val1.dtype != np.longdouble:
+        if val1.dtype != ddouble:
             raise ValueError(
                 "mjd_long requires a long double number but got {!r} of type {}".format(
                     val1, val1.dtype
@@ -126,7 +127,7 @@ class MJDLong(TimeFormat):
             )
         if val2 is None:
             val2 = 0
-        elif val2.dtype != np.longdouble:
+        elif val2.dtype != ddouble:
             raise ValueError(
                 "mjd_long requires a long double number but got {!r} of type {}".format(
                     val2, val2.dtype
@@ -147,7 +148,7 @@ class MJDLong(TimeFormat):
     @property
     def value(self):
         mjd1, mjd2 = jds_to_mjds(self.jd1, self.jd2)
-        return np.longdouble(mjd1) + np.longdouble(mjd2)
+        return (mjd1).astype(ddouble) + (mjd2).astype(ddouble)
 
 
 class PulsarMJDLong(TimeFormat):
@@ -156,7 +157,7 @@ class PulsarMJDLong(TimeFormat):
     name = "pulsar_mjd_long"
 
     def _check_val_type(self, val1, val2):
-        if val1.dtype != np.longdouble:
+        if val1.dtype != ddouble:
             raise ValueError(
                 "pulsar_mjd_long requires a long double number but got {!r} of type {}".format(
                     val1, val1.dtype
@@ -164,7 +165,7 @@ class PulsarMJDLong(TimeFormat):
             )
         if val2 is None:
             val2 = 0
-        elif val2.dtype != np.longdouble:
+        elif val2.dtype != ddouble:
             raise ValueError(
                 "pulsar_mjd_long requires a long double number but got {!r} of type {}".format(
                     val2, val2.dtype
@@ -192,10 +193,10 @@ class PulsarMJDLong(TimeFormat):
     def value(self):
         if self._scale == "utc":
             mjd1, mjd2 = jds_to_mjds_pulsar(self.jd1, self.jd2)
-            return mjd1 + np.longdouble(mjd2)
+            return mjd1 + (mjd2).astype(ddouble)
         else:
             mjd1, mjd2 = jds_to_mjds(self.jd1, self.jd2)
-            return np.longdouble(mjd1) + np.longdouble(mjd2)
+            return (mjd1).astype(ddouble) + (mjd2).astype(ddouble)
 
 
 class MJDString(TimeFormat):
@@ -265,7 +266,7 @@ def time_from_mjd_string(s, scale="utc", format="pulsar_mjd"):
 
 
 def time_from_longdouble(t, scale="utc", format="pulsar_mjd"):
-    t = np.longdouble(t)
+    t = (t).astype(ddouble)
     i = float(np.floor(t))
     f = float(t - i)
     return astropy.time.Time(val=i, val2=f, format=format, scale=scale)
@@ -335,7 +336,7 @@ def data2longdouble(data):
     if type(data) is str:
         return str2longdouble(data)
     else:
-        return np.longdouble(data)
+        return (data).astype(ddouble)
 
 
 def quantity2longdouble_withunit(data):
@@ -355,7 +356,7 @@ def quantity2longdouble_withunit(data):
 
     """
     unit = data.unit
-    data = np.longdouble(data.to_value(unit))
+    data = (data.to_value(unit)).astype(ddouble)
     return data * unit
 
 
@@ -371,7 +372,7 @@ def str2longdouble(str_data):
     """
     if not isinstance(str_data, (str, bytes)):
         raise TypeError("Need a string: {!r}".format(str_data))
-    return np.longdouble(str_data.translate(maketrans("Dd", "ee")))
+    return (str_data.translate(maketrans("Dd", "ee"))).astype(ddouble)
 
 
 # Simplified functions: These core functions, if they can be made to work
@@ -467,15 +468,15 @@ def _str_to_mjds(s):
         num, expon = ss.split("e")
         expon = int(expon)
         if expon < 0:
-            imjd, fmjd = 0, np.longdouble(ss)
+            imjd, fmjd = 0, (ss).astype(ddouble)
         else:
             mjd_s = num.split(".")
             # If input was given as an integer, add floating "0"
             if len(mjd_s) == 1:
                 mjd_s.append("0")
             imjd_s, fmjd_s = mjd_s
-            imjd = np.longdouble(int(imjd_s))
-            fmjd = np.longdouble("0." + fmjd_s)
+            imjd = (int(imjd_s)).astype(ddouble)
+            fmjd = ("0." + fmjd_s).astype(ddouble)
             if ss.startswith("-"):
                 fmjd = -fmjd
             imjd *= 10 ** expon
