@@ -467,3 +467,6 @@ class PulsarBinary(DelayComponent):
         self.OM.quantity = self.OM.quantity + dOM
         dA1 = self.A1DOT.quantity * dt_integer_orbits
         self.A1.quantity = self.A1.quantity + dA1
+
+    def asbinary(self, binarytype):
+        raise NotImplementedError

@@ -1,6 +1,7 @@
 """Approximate binary model for small eccentricity."""
 import astropy.units as u
 import numpy as np
+import copy
 from astropy.time import Time
 
 from loguru import logger as log
@@ -177,6 +178,31 @@ class BinaryELL1(PulsarBinary):
         if self.A1DOT.quantity is not None:
             dA1 = self.A1DOT.quantity * dt_integer_orbits
             self.A1.quantity = self.A1.quantity + dA1
+
+    def asbinary(self, binarytype):
+        if binarytype.upper() == "ELL1":
+            return copy.deepcopy(self)
+        elif binarytype.upper() == "ELL1H":
+            s = self.SINI.quantity
+            cbar = np.sqrt(1 - s**2)
+            stigma = s / (1 + cbar)
+            if self.SINI.uncertainty is not None:
+                stigma_unc = self.SINI.uncertainty / (
+                    (np.sqrt(1 - s**2) + 1) * np.sqrt(1 - s**2)
+                )
+            else:
+                stigma_unc = None
+            h3 = self.M2.quantity * stigma**3
+            if self.M2.uncertainty is not None:
+                h3_unc = np.sqrt(
+                    (self.M2.uncertainty * stigma**3) ** 2
+                    + (3 * self.M2.quantity * stigma**2 * stigma_unc) ** 2
+                )
+            else:
+                h3_unc = None
+            h4 = h3 * stigma
+        else:
+            raise NotImplementedError(f"Unable to convert from ELL1 to {binarytype}")
 
 
 class BinaryELL1H(BinaryELL1):
