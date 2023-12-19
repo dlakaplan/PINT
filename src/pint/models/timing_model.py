@@ -384,6 +384,20 @@ class TimingModel:
         return self.as_parfile()
 
     def as_dict(self, components=True):
+        """Return timing model as a dictionary
+        
+        Can either be a flattened list of parameters or hierarchical by component.
+        Values are converted to strings for serialization.
+
+        Parameters
+        ----------
+        components : bool, optional
+            Separate output by components
+
+        Returns
+        -------
+        dict
+        """
         params_in_components = {
             p
             for comp in [self.components[comp].params for comp in self.components]
@@ -393,8 +407,8 @@ class TimingModel:
         output = {}
         for k in params - params_in_components:
             output[k] = {
-                "value": self[k].value,
-                "uncertainty": self[k].uncertainty_value,
+                "value": str(self[k].value),
+                "uncertainty": (self[k].uncertainty_value),
                 "units": str(self[k].units),
                 "frozen": self[k].frozen,
             }
@@ -406,8 +420,8 @@ class TimingModel:
                 d = output
             for k in self.components[comp].params:
                 d[k] = {
-                    "value": self[k].value,
-                    "uncertainty": self[k].uncertainty_value,
+                    "value": str(self[k].value),
+                    "uncertainty": str(self[k].uncertainty_value),
                     "units": str(self[k].units),
                     "frozen": self[k].frozen,
                 }
