@@ -383,6 +383,36 @@ class TimingModel:
     def __str__(self):
         return self.as_parfile()
 
+    def as_dict(self, components=True):
+        params_in_components = {
+            p
+            for comp in [self.components[comp].params for comp in self.components]
+            for p in comp
+        }
+        params = set(self.params)
+        output = {}
+        for k in params - params_in_components:
+            output[k] = {
+                "value": self[k].value,
+                "uncertainty": self[k].uncertainty_value,
+                "units": str(self[k].units),
+                "frozen": self[k].frozen,
+            }
+        for comp in self.components:
+            if components:
+                output[comp] = {}
+                d = output[comp]
+            else:
+                d = output
+            for k in self.components[comp].params:
+                d[k] = {
+                    "value": self[k].value,
+                    "uncertainty": self[k].uncertainty_value,
+                    "units": str(self[k].units),
+                    "frozen": self[k].frozen,
+                }
+        return output
+
     def validate(self, allow_tcb=False):
         """Validate component setup.
 
