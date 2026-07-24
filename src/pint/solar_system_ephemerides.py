@@ -15,6 +15,11 @@ from loguru import logger as log
 import pint.config
 from pint.utils import PosVel
 
+import tempfile
+from astropy.utils.data import download_file
+from inpop import Inpop
+import inpop
+
 __all__ = ["objPosVel_wrt_SSB", "get_tdb_tt_ephem_geocenter"]
 
 ephemeris_mirrors = [
@@ -27,6 +32,23 @@ ephemeris_mirrors = [
     # DE440 is here, officially
     "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/",
 ]
+
+# https://github.com/marcelhesselberth/Inpop/tree/main
+_inpop_obj_code = {
+    "mercury": 0,
+    "venus": 1,
+    "earth": 2,
+    "mars": 3,
+    "jupiter": 4,
+    "saturn": 5,
+    "uranus": 6,
+    "neptune": 7,
+    "pluto": 8,
+    "moon": 9,
+    "sun": 10,
+    "ssb": 11,
+    "earth-moon-barycenter": 12,
+}
 
 jpl_obj_code = {
     "ssb": 0,
@@ -118,6 +140,46 @@ def _load_kernel_local(
             log.info(f"Set solar system ephemeris to local file:\n\t{p}")
             return p
     raise FileNotFoundError(f"ephemeris file {ephem} not found in any of {search_list}")
+
+
+def _inpopfile(ephem: str, short: Optional[bool] = True) -> str:
+    """Return the full filename for the INPOP ephemeris
+
+    Can return the short version (+/-100y) or long (+/-1000y)
+
+    Parameters
+    ----------
+    ephem: str
+        Name of inpop model
+    short: bool, optional
+        Whether or not to return the short version
+
+    Returns
+    -------
+    str
+    """
+    if short:
+        return f"{ephem.lower()}_TDB_m100_p100_tt.dat"
+    return f"{ephem.lower()}_TDB_m1000_p1000_tt.dat"
+
+
+def _inpopurl(ephem: str, short: Optional[bool] = True) -> str:
+    """Return the URL for the INPOP ephemeris
+
+    Can return the short version (+/-100y) or long (+/-1000y)
+
+    Parameters
+    ----------
+    ephem: str
+        Name of inpop model
+    short: bool, optional
+        Whether or not to return the short version
+
+    Returns
+    -------
+    str
+    """
+    return f"{inpop.config['ftp']['base_url']}{ephem.lower()}/{_inpopfile(ephem,short=short)}"
 
 
 def load_kernel(
@@ -231,10 +293,35 @@ def objPosVel_wrt_SSB(
     PosVel object with 3-vectors for the position and velocity of the object
     """
     objname = objname.lower()
-
-    load_kernel(ephem, path=path, link=link)
-    pos, vel = astropy.coordinates.get_body_barycentric_posvel(objname, t)
-    return PosVel(pos.xyz, vel.xyz.to(u.km / u.second), origin="ssb", obj=objname)
+    if ephem.startswith("DE"):
+        load_kernel(ephem, path=path, link=link)
+        pos, vel = astropy.coordinates.get_body_barycentric_posvel(objname, t)
+        return PosVel(pos.xyz, vel.xyz.to(u.km / u.second), origin="ssb", obj=objname)
+    elif ephem.upper().startswith("INPOP"):
+        inpop_path = download_file(_inpopurl(ephem), cache=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            # this is needed because the inpop package requires a .dat object
+            # which is not what astropy stores
+            # so symlink
+            path = os.path.join(tmp, f"{ephem}.dat")
+            os.symlink(inpop_path, path)
+            inpop_obj = Inpop(path)
+            pos_inpop = np.zeros((3, len(t)))
+            vel_inpop = np.zeros((3, len(t)))
+            for i in range(len(t)):
+                out = inpop_obj.PV(
+                    (t[i].tdb.jd1, t[i].tdb.jd2),
+                    _inpop_obj_code[objname],
+                    _inpop_obj_code["ssb"],
+                )
+                pos_inpop[:, i] = out[0]
+                vel_inpop[:, i] = out[1]
+            return PosVel(
+                (pos_inpop * u.AU).to(u.km),
+                (vel_inpop * u.AU / u.d).to(u.km / u.s),
+                origin="ssb",
+                obj=objname,
+            )
 
 
 def objPosVel(
@@ -270,20 +357,44 @@ def objPosVel(
         solar system obj1's position and velocity with respect to obj2 in the
         J2000 cartesian coordinate.
     """
-    if obj1.lower() == "ssb" and obj2.lower() != "ssb":
-        return objPosVel_wrt_SSB(obj2, t, ephem, path=path, link=link)
-    elif obj2.lower() == "ssb" and obj1.lower() != "ssb":
-        obj1pv = objPosVel_wrt_SSB(obj1, t, ephem, path=path, link=link)
-        return -obj1pv
-    elif obj2.lower() != "ssb":
-        obj1pv = objPosVel_wrt_SSB(obj1, t, ephem, path=path, link=link)
-        obj2pv = objPosVel_wrt_SSB(obj2, t, ephem, path=path, link=link)
-        return obj2pv - obj1pv
-    else:
-        # user asked for velocity between ssb and ssb
-        return PosVel(
-            np.zeros((3, len(t))) * u.km, np.zeros((3, len(t))) * u.km / u.second
-        )
+    if ephem.upper.startswith("DE"):
+        if obj1.lower() == "ssb" and obj2.lower() != "ssb":
+            return objPosVel_wrt_SSB(obj2, t, ephem, path=path, link=link)
+        elif obj2.lower() == "ssb" and obj1.lower() != "ssb":
+            obj1pv = objPosVel_wrt_SSB(obj1, t, ephem, path=path, link=link)
+            return -obj1pv
+        elif obj2.lower() != "ssb":
+            obj1pv = objPosVel_wrt_SSB(obj1, t, ephem, path=path, link=link)
+            obj2pv = objPosVel_wrt_SSB(obj2, t, ephem, path=path, link=link)
+            return obj2pv - obj1pv
+        else:
+            # user asked for velocity between ssb and ssb
+            return PosVel(
+                np.zeros((3, len(t))) * u.km, np.zeros((3, len(t))) * u.km / u.second
+            )
+    elif ephem.upper.startswith("INPOP"):
+        inpop_path = download_file(_inpopurl(ephem), cache=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            # this is needed because the inpop package requires a .dat object
+            # which is not what astropy stores
+            # so symlink
+            path = os.path.join(tmp, f"{ephem}.dat")
+            os.symlink(inpop_path, path)
+            inpop_obj = Inpop(path)
+            pos_inpop = np.zeros((3, len(t)))
+            vel_inpop = np.zeros((3, len(t)))
+            for i in range(len(t)):
+                out = inpop_obj.PV(
+                    (t[i].tdb.jd1, t[i].tdb.jd2),
+                    _inpop_obj_code[obj1],
+                    _inpop_obj_code[obj2],
+                )
+                pos_inpop[:, i] = out[0]
+                vel_inpop[:, i] = out[1]
+            return PosVel(
+                (pos_inpop * u.AU).to(u.km),
+                (vel_inpop * u.AU / u.d).to(u.km / u.s),
+            )
 
 
 def get_tdb_tt_ephem_geocenter(
@@ -297,7 +408,7 @@ def get_tdb_tt_ephem_geocenter(
 
     Parameters
     ----------
-    t: Astropy.time.Time object
+    tt: Astropy.time.Time object
         Observation time in Astropy.time.Time object format.
     ephem: str
         The ephem to for computing solar system object position and velocity (without bsp extension)
@@ -317,12 +428,26 @@ def get_tdb_tt_ephem_geocenter(
     paper:
     https://ipnpr.jpl.nasa.gov/progress_report/42-196/196C.pdf page 6.
     """
-    load_kernel(ephem, path=path, link=link)
-    kernel = astropy.coordinates.solar_system_ephemeris._kernel
-    try:
-        # JPL ID defines this column.
-        seg = kernel[1000000000, 1000000001]
-    except KeyError:
-        raise ValueError("Ephemeris '%s.bsp' do not provide the TDB-TT correction.")
-    tdb_tt = seg.compute(tt.jd1, tt.jd2)[0]
-    return tdb_tt * u.second
+    if ephem.startswith("DE"):
+        load_kernel(ephem, path=path, link=link)
+        kernel = astropy.coordinates.solar_system_ephemeris._kernel
+        try:
+            # JPL ID defines this column.
+            seg = kernel[1000000000, 1000000001]
+        except KeyError:
+            raise ValueError("Ephemeris '%s.bsp' do not provide the TDB-TT correction.")
+        tdb_tt = seg.compute(tt.jd1, tt.jd2)[0]
+        return tdb_tt * u.second
+    elif ephem.upper().startswith("INPOP"):
+        inpop_path = download_file(_inpopurl(ephem), cache=True)
+        with tempfile.TemporaryDirectory() as tmp:
+            # this is needed because the inpop package requires a .dat object
+            # which is not what astropy stores
+            # so symlink
+            path = os.path.join(tmp, f"{ephem}.dat")
+            os.symlink(inpop_path, path)
+            inpop_obj = Inpop(path)
+            tdb_tt = np.zeros(len(tt))
+            for i in range(len(tt)):
+                tdb_tt[i] = inpop_obj.TTmTDB((tt[i].tt.jd1, tt[i].tt.jd2))
+            return tdb_tt * u.s
