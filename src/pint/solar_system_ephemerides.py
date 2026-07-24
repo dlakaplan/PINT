@@ -293,7 +293,7 @@ def objPosVel_wrt_SSB(
     PosVel object with 3-vectors for the position and velocity of the object
     """
     objname = objname.lower()
-    if ephem.startswith("DE"):
+    if ephem.upper().startswith("DE"):
         load_kernel(ephem, path=path, link=link)
         pos, vel = astropy.coordinates.get_body_barycentric_posvel(objname, t)
         return PosVel(pos.xyz, vel.xyz.to(u.km / u.second), origin="ssb", obj=objname)
@@ -357,7 +357,7 @@ def objPosVel(
         solar system obj1's position and velocity with respect to obj2 in the
         J2000 cartesian coordinate.
     """
-    if ephem.upper.startswith("DE"):
+    if ephem.upper().startswith("DE"):
         if obj1.lower() == "ssb" and obj2.lower() != "ssb":
             return objPosVel_wrt_SSB(obj2, t, ephem, path=path, link=link)
         elif obj2.lower() == "ssb" and obj1.lower() != "ssb":
@@ -372,7 +372,7 @@ def objPosVel(
             return PosVel(
                 np.zeros((3, len(t))) * u.km, np.zeros((3, len(t))) * u.km / u.second
             )
-    elif ephem.upper.startswith("INPOP"):
+    elif ephem.upper().startswith("INPOP"):
         inpop_path = download_file(_inpopurl(ephem), cache=True)
         with tempfile.TemporaryDirectory() as tmp:
             # this is needed because the inpop package requires a .dat object
@@ -428,7 +428,7 @@ def get_tdb_tt_ephem_geocenter(
     paper:
     https://ipnpr.jpl.nasa.gov/progress_report/42-196/196C.pdf page 6.
     """
-    if ephem.startswith("DE"):
+    if ephem.upper().startswith("DE"):
         load_kernel(ephem, path=path, link=link)
         kernel = astropy.coordinates.solar_system_ephemeris._kernel
         try:
