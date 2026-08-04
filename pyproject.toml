@@ -41,7 +41,6 @@ dependencies = [
     "loguru",
     "nestle>=0.2.0",
     "numdifftools",
-    "inpop",
 ]
 dynamic = ["version"]
 
