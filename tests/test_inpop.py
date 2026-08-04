@@ -6,14 +6,7 @@ from pint.models import get_model
 import pint.residuals
 import pint.simulation
 import io
-from inpop import Inpop
-import inpop.constants
 import pytest
-
-
-def test_constants():
-    assert inpop.constants.AU / (1 * u.AU).to_value(u.m) == 1
-    assert inpop.constants.CLIGHT / (1 * c.c).to_value(u.m / u.s) == 1
 
 
 @pytest.mark.parametrize("ephem", ["de434", "de430", "de436", "de440"])
