@@ -213,6 +213,7 @@ class Inpop:
         path: Optional[Union[str, pathlib.Path]] = None,
         short: Optional[bool] = True,
         cache: Optional[bool] = True,
+        granulethreshold: int = 5,
     ):
         """
         Parameters
@@ -225,6 +226,10 @@ class Inpop:
             Whether to get the short (+/-100y) or long (+/-1000y) version
         cache: bool, optional
             Whether or not to cache the file (using astropy)
+        granulethreshold: int, optional
+            The threshold for the number of points in each granule (subset of interval)
+            to treat using the binned method (faster when this number).
+            If this is 0 will always use the binned method. If this is `np.inf` will always calculate by-item.
 
         Notes
         -----
@@ -252,6 +257,7 @@ class Inpop:
         self.byteorder = self.machine_byteorder
 
         self.ephem = ephem
+        self.granulethreshold = granulethreshold
         # use astropy caching for the download
         self.filename = (
             path
@@ -499,7 +505,7 @@ class Inpop:
         VZ = np.zeros(t.shape)
 
         # this threshold seems to work OK to go between the methods
-        if len(items) / len(np.unique(items)) < 5:
+        if len(items) / len(np.unique(items)) < self.granulethreshold:
             # this will work in ~constant time, but it's a little slow
             it = np.nditer(t.jd, flags=["multi_index"])
             for x in it:
@@ -522,7 +528,7 @@ class Inpop:
                     DZ(tcs[it.multi_index]) * ngranules * self.rate_factor
                 )
         else:
-            # this will work faster when there are many items from the same segment
+            # this will work faster when there are many items from the same granule
             for item in np.unique(items):
                 index = items == item
                 tc = tcs[index]
