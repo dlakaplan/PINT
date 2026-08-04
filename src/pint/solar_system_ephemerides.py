@@ -229,6 +229,13 @@ class Inpop:
         Notes
         -----
         Uses :func:`astropy.utils.data.download_file` to download and cache the file.
+
+        References
+        ----------
+        - Fienga et al. (2021), NSTIM, 110 [1]_
+
+        .. [1] https://ui.adsabs.harvard.edu/abs/2021NSTIM.110.....F/abstract
+
         """
 
         # Parse the INPOP header
